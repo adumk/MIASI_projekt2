@@ -3,9 +3,11 @@ package com.rental.application;
 import com.rental.domain.CustomerId;
 import com.rental.domain.DateRange;
 import com.rental.domain.Rental;
+import com.rental.domain.RentalId;
 import com.rental.domain.ReservationCreated;
 import com.rental.domain.Vehicle;
 import com.rental.domain.VehicleId;
+import com.rental.domain.VehicleNotAvailableException;
 import com.rental.domain.VehicleStatus;
 import com.rental.ports.out.IEventPublisher;
 import com.rental.ports.out.IRentalRepository;
@@ -19,98 +21,149 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CreateReservationUseCase — orchestration and side-effect verification")
 class CreateReservationUseCaseTest {
 
-    @Mock
-    private IRentalRepository rentalRepository;
+    @Mock private IRentalRepository    rentalRepository;
+    @Mock private IVehicleRepository   vehicleRepository;
+    @Mock private IEventPublisher      eventPublisher;
 
-    @Mock
-    private IVehicleRepository vehicleRepository;
+    @InjectMocks private CreateReservationUseCase sut;
 
-    @Mock
-    private IEventPublisher eventPublisher;
+    private static final VehicleId   VEHICLE_ID   = VehicleId.of(UUID.randomUUID());
+    private static final CustomerId  CUSTOMER_ID  = CustomerId.of(UUID.randomUUID());
+    private static final DateRange   PERIOD       = DateRange.of(
+            LocalDate.now().plusDays(1),
+            LocalDate.now().plusDays(7)
+    );
 
-    @InjectMocks
-    private CreateReservationUseCase sut;
-
-    private static final LocalDate TODAY     = LocalDate.now();
-    private static final LocalDate IN_7_DAYS = TODAY.plusDays(7);
-
-    // =========================================================================
-    // shouldSuccessfullyCreateReservation
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // Existing tests — preserved, identifiers corrected to UUID-based model
+    // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("Should save rental and publish ReservationCreated event when vehicle is available")
+    @DisplayName("should save rental and publish ReservationCreated event when vehicle is available")
     void shouldSuccessfullyCreateReservation() {
-        // given
-        VehicleId vehicleId   = VehicleId.of("vehicle-001");
-        CustomerId customerId = CustomerId.of("customer-001");
-        DateRange period      = DateRange.of(TODAY, IN_7_DAYS);
+        Vehicle availableVehicle = Vehicle.withStatus(VEHICLE_ID, VehicleStatus.AVAILABLE);
+        when(vehicleRepository.findById(VEHICLE_ID)).thenReturn(availableVehicle);
 
-        Vehicle availableVehicle = Vehicle.withStatus(vehicleId, VehicleStatus.AVAILABLE);
-        when(vehicleRepository.findById(vehicleId)).thenReturn(availableVehicle);
+        CreateReservationCommand command = new CreateReservationCommand(CUSTOMER_ID, VEHICLE_ID, PERIOD);
 
-        CreateReservationCommand command = new CreateReservationCommand(
-                customerId,
-                vehicleId,
-                period
-        );
-
-        // when
         sut.handle(command);
 
-        // then — rental must be persisted exactly once
         verify(rentalRepository, times(1)).save(any(Rental.class));
 
-        // then — ReservationCreated domain event must be published
-        ArgumentCaptor<ReservationCreated> eventCaptor =
-                ArgumentCaptor.forClass(ReservationCreated.class);
+        ArgumentCaptor<ReservationCreated> captor = ArgumentCaptor.forClass(ReservationCreated.class);
+        verify(eventPublisher, times(1)).publish(captor.capture());
 
-        verify(eventPublisher, times(1)).publish(eventCaptor.capture());
-
-        ReservationCreated publishedEvent = eventCaptor.getValue();
-        assertThat(publishedEvent.getVehicleId()).isEqualTo(vehicleId);
-        assertThat(publishedEvent.getCustomerId()).isEqualTo(customerId);
-        assertThat(publishedEvent.getPeriod()).isEqualTo(period);
+        ReservationCreated published = captor.getValue();
+        assertThat(published.vehicleId()).isEqualTo(VEHICLE_ID);
+        assertThat(published.customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(published.period()).isEqualTo(PERIOD);
     }
 
-    // =========================================================================
-    // shouldRejectReservationWhenVehicleIsUnavailable
-    // =========================================================================
-
     @Test
-    @DisplayName("Should throw VehicleNotAvailableException when vehicle status is not AVAILABLE")
+    @DisplayName("should throw VehicleNotAvailableException when vehicle status is not AVAILABLE")
     void shouldRejectReservationWhenVehicleIsUnavailable() {
-        // given
-        VehicleId vehicleId   = VehicleId.of("vehicle-002");
-        CustomerId customerId = CustomerId.of("customer-001");
-        DateRange period      = DateRange.of(TODAY, IN_7_DAYS);
+        Vehicle unavailableVehicle = Vehicle.withStatus(VEHICLE_ID, VehicleStatus.RENTED);
+        when(vehicleRepository.findById(VEHICLE_ID)).thenReturn(unavailableVehicle);
 
-        Vehicle unavailableVehicle = Vehicle.withStatus(vehicleId, VehicleStatus.RENTED);
-        when(vehicleRepository.findById(vehicleId)).thenReturn(unavailableVehicle);
+        CreateReservationCommand command = new CreateReservationCommand(CUSTOMER_ID, VEHICLE_ID, PERIOD);
 
-        CreateReservationCommand command = new CreateReservationCommand(
-                customerId,
-                vehicleId,
-                period
-        );
-
-        // when + then
         assertThatThrownBy(() -> sut.handle(command))
                 .isInstanceOf(VehicleNotAvailableException.class);
 
-        // then — no rental must be persisted on failure
-        verify(rentalRepository, times(0)).save(any(Rental.class));
+        verify(rentalRepository, never()).save(any(Rental.class));
+    }
+
+    // -------------------------------------------------------------------------
+    // New tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("should persist rental and publish ReservationCreated exactly once")
+    void shouldPersistRentalAndPublishReservationCreatedExactlyOnce() {
+        Vehicle availableVehicle = Vehicle.withStatus(VEHICLE_ID, VehicleStatus.AVAILABLE);
+        when(vehicleRepository.findById(VEHICLE_ID)).thenReturn(availableVehicle);
+
+        CreateReservationCommand command = new CreateReservationCommand(CUSTOMER_ID, VEHICLE_ID, PERIOD);
+        sut.handle(command);
+
+        verify(rentalRepository, times(1)).save(any(Rental.class));
+        verify(eventPublisher, times(1)).publish(any(ReservationCreated.class));
+    }
+
+    @Test
+    @DisplayName("should reject reservation when period is invalid")
+    void shouldRejectReservationWhenPeriodIsInvalid() {
+        CreateReservationCommand command = new CreateReservationCommand(
+                CUSTOMER_ID,
+                VEHICLE_ID,
+                null
+        );
+
+        assertThatThrownBy(() -> sut.handle(command))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(rentalRepository, never()).save(any(Rental.class));
+        verify(eventPublisher, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("should throw when vehicle is not found in repository")
+    void shouldRejectReservationWhenVehicleIsMissing() {
+        when(vehicleRepository.findById(VEHICLE_ID))
+                .thenThrow(new VehicleNotAvailableException(VEHICLE_ID));
+
+        CreateReservationCommand command = new CreateReservationCommand(CUSTOMER_ID, VEHICLE_ID, PERIOD);
+
+        assertThatThrownBy(() -> sut.handle(command))
+                .isInstanceOf(VehicleNotAvailableException.class);
+
+        verify(rentalRepository, never()).save(any(Rental.class));
+    }
+
+    @Test
+    @DisplayName("should not persist anything when reservation fails")
+    void shouldNotPersistAnythingWhenReservationFails() {
+        Vehicle unavailableVehicle = Vehicle.withStatus(VEHICLE_ID, VehicleStatus.DAMAGED);
+        when(vehicleRepository.findById(VEHICLE_ID)).thenReturn(unavailableVehicle);
+
+        CreateReservationCommand command = new CreateReservationCommand(CUSTOMER_ID, VEHICLE_ID, PERIOD);
+
+        assertThatThrownBy(() -> sut.handle(command))
+                .isInstanceOf(VehicleNotAvailableException.class);
+
+        verify(rentalRepository, never()).save(any(Rental.class));
+        verify(eventPublisher, never()).publish(any());
+    }
+
+    @Test
+    @DisplayName("should pass customer, vehicle and period to aggregate exactly once")
+    void shouldPassCustomerVehicleAndPeriodToTheAggregateExactlyOnce() {
+        Vehicle availableVehicle = Vehicle.withStatus(VEHICLE_ID, VehicleStatus.AVAILABLE);
+        when(vehicleRepository.findById(VEHICLE_ID)).thenReturn(availableVehicle);
+
+        CreateReservationCommand command = new CreateReservationCommand(CUSTOMER_ID, VEHICLE_ID, PERIOD);
+        sut.handle(command);
+
+        ArgumentCaptor<Rental> captor = ArgumentCaptor.forClass(Rental.class);
+        verify(rentalRepository, times(1)).save(captor.capture());
+
+        Rental saved = captor.getValue();
+        assertThat(saved.vehicleId()).isEqualTo(VEHICLE_ID);
+        assertThat(saved.customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(saved.period()).isEqualTo(PERIOD);
     }
 }
