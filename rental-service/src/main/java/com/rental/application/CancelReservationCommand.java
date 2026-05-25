@@ -1,4 +1,6 @@
 package com.rental.application;
 
-public record CancelReservationCommand() {
+import com.rental.domain.RentalId;
+
+public record CancelReservationCommand(RentalId rentalId) {
 }

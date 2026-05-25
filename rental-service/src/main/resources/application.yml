@@ -1,0 +1,27 @@
+rental:
+  events:
+    publisher: kafka
+  fleet-service-url: http://localhost:8082
+  customer-service-url: http://localhost:8083
+
+spring:
+  application:
+    name: rental-service
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  datasource:
+    url: jdbc:postgresql://localhost:5432/rental_db
+    username: rental_user
+    password: rental_pass
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+server:
+  port: 8081

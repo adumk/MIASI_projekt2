@@ -1,0 +1,12 @@
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /app
+COPY pom.xml common-events/pom.xml fleet-service/pom.xml ./
+COPY common-events ./common-events
+COPY fleet-service ./fleet-service
+RUN mvn -q -pl common-events,fleet-service -am package -DskipTests
+
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY --from=build /app/fleet-service/target/fleet-service-*.jar app.jar
+EXPOSE 8082
+ENTRYPOINT ["java", "-jar", "app.jar"]

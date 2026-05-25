@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+gateway:
+  security:
+    enabled: true
+    jwt-secret: miasi-local-jwt-secret-key-min-32-chars-long
+    public-paths: /api/v1/auth/login,/api/v1/auth/register
+
+spring:
+  application:
+    name: api-gateway

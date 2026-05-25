@@ -1,0 +1,15 @@
+rental:
+  events:
+    publisher: logging
+  fleet-service-url: http://localhost:8082
+  customer-service-url: http://localhost:8083
+  billing-service-url: http://localhost:8084
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/rental_db
+    username: postgres
+    password: "3006"

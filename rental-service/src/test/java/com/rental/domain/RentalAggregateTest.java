@@ -13,10 +13,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("Rental aggregate — state machine and domain event emission")
 class RentalAggregateTest {
 
-    private static final LocalDate TODAY      = LocalDate.now();
-    private static final LocalDate IN_7_DAYS  = TODAY.plusDays(7);
-    private static final LocalDate YESTERDAY  = TODAY.minusDays(1);
-    private static final LocalDate WEEK_AGO   = TODAY.minusDays(7);
+    private static final LocalDate TODAY             = LocalDate.now();
+    private static final LocalDate IN_7_DAYS         = TODAY.plusDays(7);
+    private static final LocalDate ACTUAL_RETURN_ON  = IN_7_DAYS.plusDays(1);
+    private static final LocalDate YESTERDAY         = TODAY.minusDays(1);
+    private static final LocalDate WEEK_AGO          = TODAY.minusDays(7);
 
     private RentalId    rentalId;
     private VehicleId   vehicleId;
@@ -87,6 +88,7 @@ class RentalAggregateTest {
             // given
             Rental rental = newRental();
             rental.confirm();
+            rental.confirmPayment();
 
             Customer eligibleCustomer = Customer.eligible(customerId);
 
@@ -116,6 +118,7 @@ class RentalAggregateTest {
             // given
             Rental rental = newRental();
             rental.confirm();
+            rental.confirmPayment();
 
             Customer blockedCustomer = Customer.blocked(customerId);
 
@@ -161,6 +164,7 @@ class RentalAggregateTest {
             // given
             Rental rental = newRental();
             rental.confirm();
+            rental.confirmPayment();
             rental.activate(Customer.eligible(customerId));
 
             // when + then
@@ -186,12 +190,13 @@ class RentalAggregateTest {
             // given
             Rental rental = newRental();
             rental.confirm();
+            rental.confirmPayment();
             rental.activate(Customer.eligible(customerId));
 
             Money finalCost = Money.of(350, "PLN");
 
             // when
-            rental.complete(finalCost);
+            rental.complete(finalCost, ACTUAL_RETURN_ON, 45000, "Minor scratch on bumper");
 
             // then
             assertThat(rental.getStatus())
@@ -220,7 +225,7 @@ class RentalAggregateTest {
             Money finalCost = Money.of(350, "PLN");
 
             // when + then
-            assertThatThrownBy(() -> rental.complete(finalCost))
+            assertThatThrownBy(() -> rental.complete(finalCost, ACTUAL_RETURN_ON, null, null))
                     .isInstanceOf(InvalidStatusTransitionException.class);
 
             assertThat(rental.getStatus())
@@ -244,6 +249,7 @@ class RentalAggregateTest {
 
             Rental rental = Rental.create(rentalId, vehicleId, customerId, expiredPeriod);
             rental.confirm();
+            rental.confirmPayment();
             rental.activate(Customer.eligible(customerId));
 
             // when

@@ -1,4 +1,6 @@
 package com.rental.application;
 
-public record RentVehicleCommand() {
+import com.rental.domain.RentalId;
+
+public record RentVehicleCommand(RentalId rentalId) {
 }

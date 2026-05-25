@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: billing-service-test
+  datasource:
+    url: jdbc:tc:postgresql:16:///billing_test
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
+    consumer:
+      group-id: billing-service-test
+      auto-offset-reset: earliest

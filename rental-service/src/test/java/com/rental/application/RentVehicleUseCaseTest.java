@@ -8,14 +8,10 @@ import com.rental.domain.DomainEvent;
 import com.rental.domain.Rental;
 import com.rental.domain.RentalId;
 import com.rental.domain.RentalStatus;
-import com.rental.domain.Vehicle;
 import com.rental.domain.VehicleId;
-import com.rental.domain.VehicleStatus;
-import com.rental.domain.VehicleStatusChanged;
-import com.rental.ports.out.ICustomerRepository;
+import com.rental.ports.out.ICustomerVerificationPort;
 import com.rental.ports.out.IEventPublisher;
 import com.rental.ports.out.IRentalRepository;
-import com.rental.ports.out.IVehicleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,7 +25,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,10 +37,7 @@ class RentVehicleUseCaseTest {
     private IRentalRepository rentalRepository;
 
     @Mock
-    private IVehicleRepository vehicleRepository;
-
-    @Mock
-    private ICustomerRepository customerRepository;
+    private ICustomerVerificationPort customerVerificationPort;
 
     @Mock
     private IEventPublisher eventPublisher;
@@ -56,75 +48,34 @@ class RentVehicleUseCaseTest {
     private static final LocalDate TODAY     = LocalDate.now();
     private static final LocalDate IN_7_DAYS = TODAY.plusDays(7);
 
-    // =========================================================================
-    // shouldSuccessfullyRentVehicle
-    // =========================================================================
-
     @Test
-    @DisplayName("Should activate rental, persist both aggregates and publish CarRented and VehicleStatusChanged events")
+    @DisplayName("Should activate rental, persist aggregate and publish CarRented event")
     void shouldSuccessfullyRentVehicle() {
-        // given — prepare rental aggregate in RESERVED state
         RentalId   rentalId   = RentalId.of("rental-001");
         VehicleId  vehicleId  = VehicleId.of("vehicle-001");
         CustomerId customerId = CustomerId.of("customer-001");
         DateRange  period     = DateRange.of(TODAY, IN_7_DAYS);
 
-        Rental reservedRental = Rental.create(rentalId, vehicleId, customerId, period);
-        reservedRental.confirm();
+        Rental reservedRental = Rental.reconstitute(rentalId, vehicleId, customerId, period, RentalStatus.RESERVED, true);
 
-        // given — prepare Vehicle aggregate in AVAILABLE state (reconstitution)
-        Vehicle availableVehicle = Vehicle.reconstitute(vehicleId, VehicleStatus.AVAILABLE);
-
-        // given — prepare eligible Customer snapshot
         Customer eligibleCustomer = Customer.eligible(customerId);
 
-        // given — wire up repository stubs
         when(rentalRepository.findById(rentalId)).thenReturn(reservedRental);
-        when(vehicleRepository.findById(vehicleId)).thenReturn(availableVehicle);
-        when(customerRepository.findById(customerId)).thenReturn(eligibleCustomer);
+        when(customerVerificationPort.findEligibleCustomer(customerId)).thenReturn(eligibleCustomer);
 
-        RentVehicleCommand command = new RentVehicleCommand(rentalId);
+        sut.handle(new RentVehicleCommand(rentalId));
 
-        // when
-        sut.handle(command);
-
-        // then — Rental aggregate must be re-persisted after activate()
         ArgumentCaptor<Rental> rentalCaptor = ArgumentCaptor.forClass(Rental.class);
         verify(rentalRepository, times(1)).save(rentalCaptor.capture());
 
         Rental savedRental = rentalCaptor.getValue();
         assertThat(savedRental.getStatus()).isEqualTo(RentalStatus.ACTIVE);
 
-        // then — Vehicle aggregate must be re-persisted after rent()
-        ArgumentCaptor<Vehicle> vehicleCaptor = ArgumentCaptor.forClass(Vehicle.class);
-        verify(vehicleRepository, times(1)).save(vehicleCaptor.capture());
-
-        Vehicle savedVehicle = vehicleCaptor.getValue();
-        assertThat(savedVehicle.getStatus()).isEqualTo(VehicleStatus.RENTED);
-
-        // then — IEventPublisher must publish events from both aggregates
         ArgumentCaptor<DomainEvent> eventCaptor = ArgumentCaptor.forClass(DomainEvent.class);
-        verify(eventPublisher, atLeastOnce()).publish(eventCaptor.capture());
+        verify(eventPublisher, times(1)).publish(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isInstanceOf(CarRented.class);
 
         List<DomainEvent> publishedEvents = eventCaptor.getAllValues();
-
-        // CarRented originates from Rental.activate()
-        assertThat(publishedEvents)
-                .filteredOn(e -> e instanceof CarRented)
-                .hasSize(1);
-
-        // VehicleStatusChanged originates from Vehicle.rent()
-        assertThat(publishedEvents)
-                .filteredOn(e -> e instanceof VehicleStatusChanged)
-                .hasSize(1);
-
-        VehicleStatusChanged statusChangedEvent = publishedEvents.stream()
-                .filter(e -> e instanceof VehicleStatusChanged)
-                .map(e -> (VehicleStatusChanged) e)
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(statusChangedEvent.getVehicleId()).isEqualTo(vehicleId);
-        assertThat(statusChangedEvent.getNewStatus()).isEqualTo(VehicleStatus.RENTED);
+        assertThat(publishedEvents).filteredOn(e -> e instanceof CarRented).hasSize(1);
     }
 }

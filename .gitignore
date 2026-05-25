@@ -13,6 +13,10 @@ target/
 # VS Code 
 .vscode/ 
  
+# Node
+node_modules/
+frontend/dist/
+
 # Logs 
 *.log 
 logs/ 

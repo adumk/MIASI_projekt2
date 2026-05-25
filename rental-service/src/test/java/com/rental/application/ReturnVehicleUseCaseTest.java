@@ -1,18 +1,17 @@
 package com.rental.application;
 
 import com.rental.domain.CarReturned;
-import com.rental.domain.VehicleStatusChanged;
 import com.rental.domain.CustomerId;
 import com.rental.domain.DateRange;
 import com.rental.domain.Rental;
 import com.rental.domain.RentalId;
 import com.rental.domain.RentalStatus;
-import com.rental.domain.Vehicle;
 import com.rental.domain.VehicleId;
-import com.rental.domain.VehicleStatus;
+import com.rental.domain.Money;
+import com.rental.ports.out.IBillingQuotePort;
 import com.rental.ports.out.IEventPublisher;
+import com.rental.ports.out.IFleetVehicleInfoPort;
 import com.rental.ports.out.IRentalRepository;
-import com.rental.ports.out.IVehicleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,10 +36,13 @@ class ReturnVehicleUseCaseTest {
     private IRentalRepository rentalRepository;
 
     @Mock
-    private IVehicleRepository vehicleRepository;
+    private IEventPublisher eventPublisher;
 
     @Mock
-    private IEventPublisher eventPublisher;
+    private IFleetVehicleInfoPort fleetVehicleInfoPort;
+
+    @Mock
+    private IBillingQuotePort billingQuotePort;
 
     @InjectMocks
     private ReturnVehicleUseCase sut;
@@ -50,9 +52,8 @@ class ReturnVehicleUseCaseTest {
     private static final LocalDate ACTUAL_RETURN_ON = IN_7_DAYS.plusDays(1);
 
     @Test
-    @DisplayName("Should complete rental, persist rental and vehicle updates, and publish CarReturned and VehicleStatusChanged events")
+    @DisplayName("Should complete rental, persist rental and publish CarReturned event")
     void shouldSuccessfullyReturnVehicle() {
-        // given — przygotowanie agregatów przy użyciu precyzyjnego nazewnictwa i rekonstytucji
         RentalId rentalId = RentalId.of("rental-001");
         VehicleId vehicleId = VehicleId.of("vehicle-001");
         CustomerId customerId = CustomerId.of("customer-001");
@@ -60,33 +61,19 @@ class ReturnVehicleUseCaseTest {
 
         Rental activeRental = Rental.create(rentalId, vehicleId, customerId, period);
         activeRental.confirm();
+        activeRental.confirmPayment();
         activeRental.activate();
 
-        // Rekonstytucja stanu zamiast "withStatus"
-        Vehicle rentedVehicle = Vehicle.reconstitute(vehicleId, VehicleStatus.RENTED);
-
         when(rentalRepository.findById(rentalId)).thenReturn(activeRental);
-        when(vehicleRepository.findById(vehicleId)).thenReturn(rentedVehicle);
+        when(fleetVehicleInfoPort.resolveCategory(vehicleId)).thenReturn("COMPACT");
+        when(billingQuotePort.quoteRentalCost(any(), any(), any())).thenReturn(Money.of(35000, "PLN"));
 
-        ReturnVehicleCommand command = new ReturnVehicleCommand(rentalId, ACTUAL_RETURN_ON);
+        sut.handle(new ReturnVehicleCommand(rentalId, ACTUAL_RETURN_ON, 12000, "OK"));
 
-        // when
-        sut.handle(command);
-
-        // then — Weryfikacja zapisu Rental
         ArgumentCaptor<Rental> rentalCaptor = ArgumentCaptor.forClass(Rental.class);
         verify(rentalRepository, times(1)).save(rentalCaptor.capture());
         assertThat(rentalCaptor.getValue().getStatus()).isEqualTo(RentalStatus.COMPLETED);
 
-        // then — Weryfikacja zapisu Vehicle
-        ArgumentCaptor<Vehicle> vehicleCaptor = ArgumentCaptor.forClass(Vehicle.class);
-        verify(vehicleRepository, times(1)).save(vehicleCaptor.capture());
-        assertThat(vehicleCaptor.getValue().getStatus()).isEqualTo(VehicleStatus.AVAILABLE);
-
-        // then — Weryfikacja publikacji POPRAWNYCH zdarzeń (Rental + Fleet)
         verify(eventPublisher, times(1)).publish(any(CarReturned.class));
-        verify(eventPublisher, times(1)).publish(any(VehicleStatusChanged.class));
-
-        // BRAK asercji dla CostCalculated — to domena serwisu Billing!
     }
 }

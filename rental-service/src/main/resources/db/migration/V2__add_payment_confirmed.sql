@@ -1,0 +1,1 @@
+ALTER TABLE rentals ADD COLUMN payment_confirmed BOOLEAN NOT NULL DEFAULT FALSE;

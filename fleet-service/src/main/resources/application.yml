@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: fleet-service
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/fleet_db
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: fleet-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+server:
+  port: 8082
