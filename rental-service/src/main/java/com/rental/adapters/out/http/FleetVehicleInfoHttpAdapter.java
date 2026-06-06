@@ -20,12 +20,18 @@ public class FleetVehicleInfoHttpAdapter implements IFleetVehicleInfoPort {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public String resolveCategory(VehicleId vehicleId) {
-        @SuppressWarnings("unchecked")
         Map<String, Object> response = webClient.get()
                 .uri("/api/v1/vehicles/{id}", vehicleId.getValue())
                 .retrieve()
+                .onStatus(
+                        status -> status.is4xxClientError() || status.is5xxServerError(),
+                        clientResponse -> clientResponse.releaseBody()
+                                .thenReturn(new RuntimeException("HTTP error: " + clientResponse.statusCode()))
+                )
                 .bodyToMono(Map.class)
+                .onErrorReturn(Map.of())
                 .block();
         if (response == null || response.get("category") == null) {
             return "COMPACT";

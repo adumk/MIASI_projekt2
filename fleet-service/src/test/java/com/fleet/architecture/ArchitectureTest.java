@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 @DisplayName("Architecture guardrails — Hexagonal Architecture")
 class ArchitectureTest {
@@ -77,5 +78,39 @@ class ArchitectureTest {
                 .as("Classes in adapters.out must implement interfaces defined in ports.out");
 
         adaptersOutMustImplementPortsOut.check(importedClasses);
+    }
+    @Test
+    @DisplayName("Domain classes should not have @Entity annotation")
+    void domainClassesShouldNotHaveEntityAnnotations() {
+        ArchRule noEntityInDomain = noClasses()
+                .that().resideInAPackage(DOMAIN_PACKAGE)
+                .should().beAnnotatedWith(jakarta.persistence.Entity.class)
+                .as("Domain classes must not be annotated with @Entity — keep domain free of JPA");
+
+        noEntityInDomain.check(importedClasses);
+    }
+
+    @Test
+    @DisplayName("Domain classes should not have Spring component annotations")
+    void domainClassesShouldNotHaveSpringComponentAnnotations() {
+        ArchRule noSpringInDomain = noClasses()
+                .that().resideInAPackage(DOMAIN_PACKAGE)
+                .should().beAnnotatedWith(org.springframework.stereotype.Component.class)
+                .orShould().beAnnotatedWith(org.springframework.stereotype.Service.class)
+                .orShould().beAnnotatedWith(org.springframework.stereotype.Repository.class)
+                .as("Domain classes must not be annotated with Spring stereotypes");
+
+        noSpringInDomain.check(importedClasses);
+    }
+
+    @Test
+    @DisplayName("Use case classes should not have @Repository annotation")
+    void useCaseClassesShouldNotHaveRepositoryAnnotation() {
+        ArchRule noRepositoryOnUseCases = noClasses()
+                .that().resideInAPackage(APPLICATION_PACKAGE)
+                .should().beAnnotatedWith(org.springframework.stereotype.Repository.class)
+                .as("UseCase classes in the application layer must not be annotated with @Repository");
+
+        noRepositoryOnUseCases.check(importedClasses);
     }
 }

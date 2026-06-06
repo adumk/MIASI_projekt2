@@ -29,4 +29,11 @@ public class RentalApiExceptionHandler {
         detail.setTitle("Invalid request");
         return detail;
     }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ProblemDetail handleUnexpected(RuntimeException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        detail.setTitle("Internal server error");
+        return detail;
+    }
 }

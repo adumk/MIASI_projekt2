@@ -25,10 +25,12 @@ public class DamageReportedKafkaListener {
 
     public void onDamageReported(String payload) {
         try {
-            DamageReportedEvent event = objectMapper.readValue(payload, DamageReportedEvent.class);
-            if (!"DamageReported".equals(event.getEventType())) {
+            java.util.Map<?, ?> rawJson = objectMapper.readValue(payload, java.util.Map.class);
+            if (!"DamageReported".equals(rawJson.get("eventType"))) {
                 return;
             }
+
+            DamageReportedEvent event = objectMapper.readValue(payload, DamageReportedEvent.class);
             applyDamageFeeUseCase.handle(new ApplyDamageFeeCommand(event.getVehicleId(), event.getSeverity()));
             log.info("Damage fee applied for vehicle {}", event.getVehicleId());
         } catch (Exception e) {

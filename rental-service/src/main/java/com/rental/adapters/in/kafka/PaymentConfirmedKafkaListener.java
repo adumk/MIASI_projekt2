@@ -33,10 +33,12 @@ public class PaymentConfirmedKafkaListener {
 
     public void onPaymentConfirmed(String payload) {
         try {
-            PaymentConfirmedEvent event = objectMapper.readValue(payload, PaymentConfirmedEvent.class);
-            if (!"PaymentConfirmed".equals(event.getEventType())) {
+            java.util.Map<?, ?> rawJson = objectMapper.readValue(payload, java.util.Map.class);
+            if (!"PaymentConfirmed".equals(rawJson.get("eventType"))) {
                 return;
             }
+
+            PaymentConfirmedEvent event = objectMapper.readValue(payload, PaymentConfirmedEvent.class);
             closeSettlementUseCase.handle(RentalId.of(event.getRentalId()));
             log.info("Settlement closed for rental {}", event.getRentalId());
         } catch (Exception e) {

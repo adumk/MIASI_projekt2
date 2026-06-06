@@ -275,4 +275,85 @@ class RentalAggregateTest {
                     .isEqualTo(RentalStatus.RESERVED);
         }
     }
+
+    // =========================================================================
+    // closeSettlement()
+    // =========================================================================
+
+    @Nested
+    @DisplayName("closeSettlement() — settlement finalization")
+    class CloseSettlement {
+
+        @Test
+        @DisplayName("Should mark settlement as closed after rental is COMPLETED")
+        void closeSettlementShouldTransitionFromCompletedToSettled() {
+            // given
+            Rental rental = newRental();
+            rental.confirm();
+            rental.confirmPayment();
+            rental.activate(Customer.eligible(customerId));
+            rental.complete(Money.of(350, "PLN"), IN_7_DAYS, 45000, null);
+
+            // when
+            rental.closeSettlement();
+
+            // then
+            assertThat(rental.isSettlementClosed()).isTrue();
+            assertThat(rental.getStatus()).isEqualTo(RentalStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("Should throw InvalidStatusTransitionException when closing settlement on non-COMPLETED rental")
+        void shouldRejectCloseSettlementWhenNotCompleted() {
+            // given
+            Rental rental = newRental();
+            rental.confirm();
+
+            // when + then
+            assertThatThrownBy(rental::closeSettlement)
+                    .isInstanceOf(InvalidStatusTransitionException.class);
+
+            assertThat(rental.getStatus()).isEqualTo(RentalStatus.RESERVED);
+        }
+    }
+
+    // =========================================================================
+    // confirmPayment()
+    // =========================================================================
+
+    @Nested
+    @DisplayName("confirmPayment() — payment confirmation")
+    class ConfirmPayment {
+
+        @Test
+        @DisplayName("Should reject activation when payment is not confirmed")
+        void shouldRejectActivationWhenPaymentNotConfirmed() {
+            // given
+            Rental rental = newRental();
+            rental.confirm();
+            // payment NOT confirmed
+
+            Customer eligibleCustomer = Customer.eligible(customerId);
+
+            // when + then
+            assertThatThrownBy(() -> rental.activate(eligibleCustomer))
+                    .isInstanceOf(InvalidStatusTransitionException.class);
+
+            assertThat(rental.getStatus()).isEqualTo(RentalStatus.RESERVED);
+        }
+
+        @Test
+        @DisplayName("Should mark payment as confirmed after confirmPayment()")
+        void confirmPaymentShouldMarkPaymentAsConfirmed() {
+            // given
+            Rental rental = newRental();
+            rental.confirm();
+
+            // when
+            rental.confirmPayment();
+
+            // then
+            assertThat(rental.isPaymentConfirmed()).isTrue();
+        }
+    }
 }

@@ -86,4 +86,56 @@ class InvoiceAggregateTest {
             assertThat(invoice.getStatus()).isEqualTo(InvoiceStatus.PAID);
         }
     }
+
+    @Nested
+    @DisplayName("state transitions — negative scenarios")
+    class StateTransitions {
+
+        @Test
+        @DisplayName("Should reject issue() when invoice is not in COST_CALCULATED state")
+        void shouldRejectIssueWhenNotInCostCalculatedState() {
+            Invoice invoice = Invoice.createDraft(rentalId, customerId, VehicleCategory.STANDARD);
+
+            assertThatThrownBy(invoice::issue)
+                    .isInstanceOf(InvalidInvoiceStateException.class);
+        }
+
+        @Test
+        @DisplayName("Should reject markPaid() when invoice is not ISSUED")
+        void shouldRejectMarkPaidWhenNotIssued() {
+            Invoice invoice = Invoice.createDraft(rentalId, customerId, VehicleCategory.STANDARD);
+            invoice.calculateCost(RentalCost.of(2, 150L, Money.pln(300)));
+
+            assertThatThrownBy(invoice::markPaid)
+                    .isInstanceOf(InvalidInvoiceStateException.class);
+        }
+
+        @Test
+        @DisplayName("Should emit RefundIssued event when refund is applied to PAID invoice")
+        void shouldEmitRefundIssuedEventWhenApplicable() {
+            Invoice invoice = Invoice.createDraft(rentalId, customerId, VehicleCategory.STANDARD);
+            invoice.calculateCost(RentalCost.of(2, 150L, Money.pln(300)));
+            invoice.issue();
+            invoice.markPaid();
+            invoice.clearDomainEvents();
+
+            invoice.issueRefund();
+
+            assertThat(invoice.getStatus()).isEqualTo(InvoiceStatus.REFUNDED);
+            assertThat(invoice.getDomainEvents())
+                    .hasSize(1)
+                    .first()
+                    .isInstanceOf(RefundIssued.class);
+        }
+
+        @Test
+        @DisplayName("createDraft should set DRAFT status with null rentalCost and empty events")
+        void createDraftShouldSetCorrectInitialState() {
+            Invoice invoice = Invoice.createDraft(rentalId, customerId, VehicleCategory.STANDARD);
+
+            assertThat(invoice.getStatus()).isEqualTo(InvoiceStatus.DRAFT);
+            assertThat(invoice.getRentalCost()).isNull();
+            assertThat(invoice.getDomainEvents()).isEmpty();
+        }
+    }
 }

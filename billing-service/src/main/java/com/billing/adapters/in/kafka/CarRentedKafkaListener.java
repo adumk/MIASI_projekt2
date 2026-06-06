@@ -26,14 +26,25 @@ public class CarRentedKafkaListener {
 
     public void onCarRented(String payload) {
         try {
-            CarRentedEvent event = objectMapper.readValue(payload, CarRentedEvent.class);
-            if (!"CarRented".equals(event.getEventType())) {
+            // 1. Najpierw czytamy payload jako surowe drzewo dokumentu JSON
+            var jsonNode = objectMapper.readTree(payload);
+
+            // 2. Bezpiecznie wyciągamy rzeczywistą wartość "eventType" z tekstu
+            String actualEventType = jsonNode.path("eventType").asText();
+
+            // 3. Jeśli typ się nie zgadza — przerywamy działanie (Guard Clause)
+            if (!"CarRented".equals(actualEventType)) {
                 return;
             }
+
+            // 4. Dopiero po walidacji typu mapujemy na pełny obiekt biznesowy
+            CarRentedEvent event = objectMapper.readValue(payload, CarRentedEvent.class);
+
             sessionStore.startSession(
                     RentalId.of(event.getRentalId()),
                     LocalDate.parse(event.getActualStartDate()));
             log.info("Billing session started for rental {}", event.getRentalId());
+
         } catch (Exception e) {
             log.error("Failed to process CarRented", e);
             throw new IllegalStateException("Failed to process CarRented", e);
