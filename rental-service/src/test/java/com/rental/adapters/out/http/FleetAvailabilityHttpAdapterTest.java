@@ -16,6 +16,8 @@ import java.time.LocalDate;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.*;
+import java.net.http.HttpClient;
+import org.springframework.http.client.reactive.JdkClientHttpConnector;
 
 @DisplayName("FleetAvailabilityHttpAdapter — HTTP calls to fleet-service")
 class FleetAvailabilityHttpAdapterTest {
@@ -31,7 +33,10 @@ class FleetAvailabilityHttpAdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new FleetAvailabilityHttpAdapter(
-                WebClient.builder(),
+                WebClient.builder()
+                        .clientConnector(
+                                new JdkClientHttpConnector(
+                                        HttpClient.newHttpClient())),
                 "http://localhost:" + wireMock.getPort());
         period = DateRange.of(LocalDate.now(), LocalDate.now().plusDays(3));
     }

@@ -13,6 +13,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.*;
+import java.net.http.HttpClient;
+import org.springframework.http.client.reactive.JdkClientHttpConnector;
 
 @DisplayName("CustomerVerificationHttpAdapter — HTTP calls to customer-service")
 class CustomerVerificationHttpAdapterTest {
@@ -27,7 +29,10 @@ class CustomerVerificationHttpAdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new CustomerVerificationHttpAdapter(
-                WebClient.builder(),
+                WebClient.builder()
+                        .clientConnector(
+                                new JdkClientHttpConnector(
+                                        HttpClient.newHttpClient())),
                 "http://localhost:" + wireMock.getPort());
     }
 

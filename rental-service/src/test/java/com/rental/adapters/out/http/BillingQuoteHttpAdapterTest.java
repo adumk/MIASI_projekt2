@@ -13,6 +13,8 @@ import java.time.LocalDate;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.*;
+import java.net.http.HttpClient;
+import org.springframework.http.client.reactive.JdkClientHttpConnector;
 
 @DisplayName("BillingQuoteHttpAdapter — HTTP calls to billing-service for rental quotes")
 class BillingQuoteHttpAdapterTest {
@@ -30,7 +32,10 @@ class BillingQuoteHttpAdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new BillingQuoteHttpAdapter(
-                WebClient.builder(),
+                WebClient.builder()
+                        .clientConnector(
+                                new JdkClientHttpConnector(
+                                        HttpClient.newHttpClient())),
                 "http://localhost:" + wireMock.getPort());
     }
 
